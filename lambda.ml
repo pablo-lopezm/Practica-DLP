@@ -6,11 +6,10 @@ type ty =
   | TyNat
   | TyArr of ty * ty
   | TyString
+  | TyTuple of ty list 
 ;;
 
-type context =
-  (string * ty) list
-;;
+
 
 type term =
     TmTrue
@@ -27,8 +26,24 @@ type term =
   | TmFix of term
   | TmString of string
   | TmConcat of term * term
+  | TmTuple of term list
 ;;
 
+type command =
+  Eval of term
+  | Bind of string * term
+  (* | TBind of string * ty variable de tipos*)
+  | Quit
+;;
+
+type binding =
+  TyBind of ty
+  | TyTmBind of (ty * term)
+;;
+
+type context =
+  (string * binding) list
+;;
 
 (* CONTEXT MANAGEMENT *)
 
@@ -36,12 +51,24 @@ let emptyctx =
   []
 ;;
 
-let addbinding ctx x bind =
-  (x, bind) :: ctx
+let addtbinding ctx s ty =
+  (s, TyBind ty) :: ctx
 ;;
 
-let getbinding ctx x =
-  List.assoc x ctx
+let addvbinding ctx s ty tm =
+  (s, TyTmBind (ty, tm)) :: ctx
+;;
+
+let gettbinding ctx s =
+  match List.assoc s ctx with 
+    TyBind ty -> ty
+    | TyTmBind (ty, _) -> ty
+;;
+
+let getvbinding ctx s = 
+  match List.assoc s ctx with 
+    TyTmBind (_, tm) -> tm
+    | _ -> raise Not_found
 ;;
 
 
@@ -53,9 +80,11 @@ let rec string_of_ty ty = match ty with
   | TyNat ->
       "Nat"
   | TyArr (ty1, ty2) ->
-      "(" ^ string_of_ty ty1 ^ ")" ^ " -> " ^ "(" ^ string_of_ty ty2 ^ ")"
+      string_of_ty ty1 ^ " -> " ^ string_of_ty ty2 
   | TyString -> 
       "String"
+  | TyTuple tys -> 
+      "{" ^ String.concat ", " (List.map string_of_ty tys) ^ "}"
 ;;
 
 exception Type_error of string
@@ -100,12 +129,12 @@ let rec typeof ctx tm = match tm with
 
     (* T-Var *)
   | TmVar x ->
-      (try getbinding ctx x with
+      (try gettbinding ctx x with (*A lo mejor es getvbinding *)
        _ -> raise (Type_error ("no binding type for variable " ^ x)))
 
     (* T-Abs *)
   | TmAbs (x, tyT1, t2) ->
-      let ctx' = addbinding ctx x tyT1 in
+      let ctx' = addtbinding ctx x tyT1 in
       let tyT2 = typeof ctx' t2 in
       TyArr (tyT1, tyT2)
 
@@ -122,7 +151,7 @@ let rec typeof ctx tm = match tm with
     (* T-Let *)
   | TmLetIn (x, t1, t2) ->
       let tyT1 = typeof ctx t1 in
-      let ctx' = addbinding ctx x tyT1 in
+      let ctx' = addtbinding ctx x tyT1 in
       typeof ctx' t2
     (* T-FIX *)
   | TmFix t1 ->
@@ -141,6 +170,9 @@ let rec typeof ctx tm = match tm with
   | TmConcat (t1, t2) -> 
       if typeof ctx t1 = TyString && typeof ctx t2 = TyString then TyString 
       else raise (Type_error "argument of concat is not a string")
+
+  | TmTuple terms ->
+      TyTuple (List.map (typeof ctx) terms)
 ;;
 
 
@@ -151,7 +183,7 @@ let rec string_of_term = function
       "true"
   | TmFalse ->
       "false"
-  | TmIf (t1,t2,t3) ->
+  | TmIf (t1,t2,t3) -> 
       "if " ^ "(" ^ string_of_term t1 ^ ")" ^
       " then " ^ "(" ^ string_of_term t2 ^ ")" ^
       " else " ^ "(" ^ string_of_term t3 ^ ")"
@@ -181,6 +213,8 @@ let rec string_of_term = function
     "\"" ^ s ^ "\""
   | TmConcat (t1, t2) -> 
       "concat " ^ "(" ^ string_of_term t1 ^ ")" ^ " " ^ "(" ^ string_of_term t2 ^ ")"
+  | TmTuple terms -> 
+      "{" ^ String.concat ", " (List.map string_of_term terms) ^ "}"
 ;;
 
 let rec ldif l1 l2 = match l1 with
@@ -222,6 +256,9 @@ let rec free_vars tm = match tm with
     []
   | TmConcat (t1, t2) ->
     lunion (free_vars t1) (free_vars t2)
+  | TmTuple terms ->
+    List.fold_left (fun acc t -> lunion acc (free_vars t)) [] terms
+
 ;;
 
 let rec fresh_name x l =
@@ -267,6 +304,8 @@ let rec subst x s tm = match tm with
       TmString st
   | TmConcat (t1, t2) -> 
       TmConcat (subst x s t1, subst x s t2)
+  | TmTuple terms ->
+      TmTuple (List.map (subst x s) terms)
 ;;
 
 let rec isnumericval tm = match tm with
@@ -281,13 +320,14 @@ let rec isval tm = match tm with
   | TmAbs _ -> true
   | TmString _-> true
   | t when isnumericval t -> true
+  | TmTuple terms -> List.for_all isval terms 
   | _ -> false
 ;;
 
 exception NoRuleApplies
 ;;
 
-let rec eval1 tm = match tm with
+let rec eval1 ctx tm = match tm with
     (* E-IfTrue *)
     TmIf (TmTrue, t2, _) ->
       t2
@@ -298,12 +338,12 @@ let rec eval1 tm = match tm with
 
     (* E-If *)
   | TmIf (t1, t2, t3) ->
-      let t1' = eval1 t1 in
+      let t1' = eval1 ctx t1 in
       TmIf (t1', t2, t3)
 
     (* E-Succ *)
   | TmSucc t1 ->
-      let t1' = eval1 t1 in
+      let t1' = eval1 ctx t1 in
       TmSucc t1'
 
     (* E-PredZero *)
@@ -316,7 +356,7 @@ let rec eval1 tm = match tm with
 
     (* E-Pred *)
   | TmPred t1 ->
-      let t1' = eval1 t1 in
+      let t1' = eval1 ctx t1 in
       TmPred t1'
 
     (* E-IszeroZero *)
@@ -329,7 +369,7 @@ let rec eval1 tm = match tm with
 
     (* E-Iszero *)
   | TmIsZero t1 ->
-      let t1' = eval1 t1 in
+      let t1' = eval1 ctx t1 in
       TmIsZero t1'
 
     (* E-AppAbs *)
@@ -338,12 +378,12 @@ let rec eval1 tm = match tm with
 
     (* E-App2: evaluate argument before applying function *)
   | TmApp (v1, t2) when isval v1 ->
-      let t2' = eval1 t2 in
+      let t2' = eval1 ctx t2 in
       TmApp (v1, t2')
 
     (* E-App1: evaluate function before argument *)
   | TmApp (t1, t2) ->
-      let t1' = eval1 t1 in
+      let t1' = eval1 ctx t1 in
       TmApp (t1', t2)
 
     (* E-LetV *)
@@ -352,36 +392,63 @@ let rec eval1 tm = match tm with
 
     (* E-Let *)
   | TmLetIn(x, t1, t2) ->
-      let t1' = eval1 t1 in
+      let t1' = eval1 ctx t1 in
       TmLetIn (x, t1', t2)
 
   | TmFix(TmAbs(x, _, t2)) ->
       subst x tm t2
 
   | TmFix t1 ->
-      let t1' = eval1 t1 in 
+      let t1' = eval1 ctx t1 in 
       TmFix t1'
 
   | TmConcat (TmString s1, TmString s2) -> 
       TmString (s1 ^ s2)
   
   | TmConcat (TmString s1, t2) -> 
-    let t2' = eval1 t2 in 
+    let t2' = eval1 ctx t2 in 
     TmConcat (TmString s1, t2')
 
   | TmConcat (t1, t2) -> 
-      let t1' = eval1 t1 in 
+      let t1' = eval1 ctx t1 in 
       TmConcat (t1', t2)
 
+  | TmVar s -> 
+      getvbinding ctx s
+    
+  (* E-Tuple: Evalúa el primer término no evaluado de la tupla *)
+  | TmTuple terms ->
+      TmTuple (List.map (eval1 ctx) terms)
   | _ ->
-      raise NoRuleApplies
+    raise NoRuleApplies
 ;;
 
-let rec eval tm =
+let apply_ctx ctx tm = 
+  List.fold_left ( fun t x -> subst x (getvbinding  ctx x) t) tm (free_vars tm)
+;;
+
+let rec eval ctx tm =
   try
-    let tm' = eval1 tm in
-    eval tm'
+    let tm' = eval1 ctx tm in
+    eval ctx tm'
   with
-    NoRuleApplies -> tm
+    NoRuleApplies -> apply_ctx ctx tm
 ;;
 
+
+let execute ctx = function
+  Eval tm ->
+    let tyTm = typeof ctx tm in 
+    let tm' = eval ctx tm in 
+    (*pretty printer*) print_endline("- : " ^ string_of_ty tyTm ^ " = " ^ string_of_term tm');
+    ctx 
+
+  | Bind(s, tm) ->
+    let tyTm = typeof ctx tm in 
+    let tm' = eval ctx tm in 
+    (*pretty printer*) print_endline(s ^ " : " ^ string_of_ty tyTm ^ " = " ^ string_of_term tm');
+    addvbinding ctx s tyTm tm'
+    
+  | Quit -> 
+    raise End_of_file
+ ;;

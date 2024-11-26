@@ -1,4 +1,3 @@
-
 %{
   open Lambda;;
 %}
@@ -15,13 +14,18 @@
 %token LET
 %token LETREC
 %token IN
+%token CONCAT
 %token BOOL
 %token NAT
 %token STRING
-%token CONCAT
+%token QUIT
+
 %token LPAREN
 %token RPAREN
+%token LCURLY
+%token RCURLY
 %token DOT
+%token COMMA
 %token EQ
 %token COLON
 %token ARROW
@@ -31,15 +35,19 @@
 %token <string> IDV
 %token <string> STRINGV
 
-
 %start s
-%type <Lambda.term> s
+%type <Lambda.command> s
 
 %%
 
 s :
-    term EOF
-      { $1 }
+    IDV EQ term EOF
+      { Bind ($1, $3) }
+    |term EOF
+      { Eval $1 }
+    | QUIT EOF
+      { Quit }
+
 
 term :
     appTerm
@@ -50,8 +58,9 @@ term :
       { TmAbs ($2, $4, $6) }
   | LET IDV EQ term IN term
       { TmLetIn ($2, $4, $6) }
-  | LETREC IDV COLON ty EQ term IN term   
-      { TmLetIn ($2, TmFix (TmAbs ($2, $4, $6)), $8)}
+  | LETREC IDV COLON ty EQ term IN term
+      { TmLetIn ($2, TmFix (TmAbs ($2, $4, $6)), $8) }
+
 
 appTerm :
     atomicTerm
@@ -63,13 +72,15 @@ appTerm :
   | ISZERO atomicTerm
       { TmIsZero $2 }
   | CONCAT atomicTerm atomicTerm
-      { TmConcat ($2, $3)}
+      { TmConcat ($2, $3) }
   | appTerm atomicTerm
       { TmApp ($1, $2) }
 
 atomicTerm :
     LPAREN term RPAREN
       { $2 }
+  | LCURLY tupleList RCURLY 
+      { TmTuple $2 }
   | TRUE
       { TmTrue }
   | FALSE
@@ -82,7 +93,16 @@ atomicTerm :
           | n -> TmSucc (f (n-1))
         in f $1 }
   | STRINGV
-    {TmString $1}
+        { TmString $1 }
+
+tupleList:
+    | term
+        { [$1] }
+    | term COMMA tupleList
+        { $1 :: $3 }
+    | /* Nueva regla para lista vacía */
+    /* La lista vacía no consume ningún término */
+    { [] }  
 
 ty :
     atomicTy
@@ -99,4 +119,11 @@ atomicTy :
       { TyNat }
   | STRING
       { TyString }
+  | LCURLY tyList RCURLY
+      { TyTuple $2 }
 
+tyList:
+    ty
+      { [$1] }
+  | ty COMMA tyList
+      { $1 :: $3 }

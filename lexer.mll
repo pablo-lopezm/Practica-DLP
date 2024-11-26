@@ -1,4 +1,3 @@
-
 {
   open Parser;;
   exception Lexical_error;;
@@ -23,9 +22,13 @@ rule token = parse
   | "Bool"      { BOOL }
   | "Nat"       { NAT }
   | "String"    { STRING }
+  | "quit"      { QUIT }
   | '('         { LPAREN }
   | ')'         { RPAREN }
+  | '{'         { LCURLY }
+  | '}'         { RCURLY }
   | '.'         { DOT }
+  | ','         { COMMA }
   | '='         { EQ }
   | ':'         { COLON }
   | "->"        { ARROW }
@@ -34,8 +37,9 @@ rule token = parse
                 { IDV (Lexing.lexeme lexbuf) }
   | '"'[^ '"' ';' '\n']*'"' { 
                   let s = Lexing.lexeme lexbuf in
-                  STRINGV (String sub s l (String.length s - 2)) 
+                  STRINGV (String.sub s 1 (String.length s - 2)) 
                   }
   | eof         { EOF }
   | _           { raise Lexical_error }
 
+  

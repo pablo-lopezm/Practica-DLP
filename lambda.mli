@@ -4,10 +4,7 @@ type ty =
   | TyNat
   | TyArr of ty * ty
   | TyString
-;;
-
-type context =
-  (string * ty) list
+  | TyTuple of ty list 
 ;;
 
 type term =
@@ -25,11 +22,30 @@ type term =
   | TmFix of term
   | TmString of string
   | TmConcat of term * term
+  | TmTuple of term list
+  (*| TmProj of term * string*)
+;;
+
+type command = 
+  Eval of term
+  | Bind of string * term
+  | Quit
+;;
+
+type binding = 
+  TyBind of ty 
+  | TyTmBind of (ty * term)
+;;
+
+type context =
+  (string * binding) list
 ;;
 
 val emptyctx : context;;
-val addbinding : context -> string -> ty -> context;;
-val getbinding : context -> string -> ty;;
+val addtbinding : context -> string -> ty -> context;;
+val addvbinding : context -> string -> ty -> term -> context;;
+val gettbinding : context -> string -> ty;;
+val getvbinding : context -> string -> term;;
 
 val string_of_ty : ty -> string;;
 exception Type_error of string;;
@@ -37,5 +53,6 @@ val typeof : context -> term -> ty;;
 
 val string_of_term : term -> string;;
 exception NoRuleApplies;;
-val eval : term -> term;;
+val eval : context -> term -> term;;
 
+val execute : context -> command -> context;;
