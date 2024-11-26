@@ -75,6 +75,8 @@ appTerm :
       { TmConcat ($2, $3) }
   | appTerm atomicTerm
       { TmApp ($1, $2) }
+  | appTerm DOT INTV
+      { TmProj ($1, string_of_int $3) }
 
 atomicTerm :
     LPAREN term RPAREN

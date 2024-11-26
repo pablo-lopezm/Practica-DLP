@@ -27,6 +27,7 @@ type term =
   | TmString of string
   | TmConcat of term * term
   | TmTuple of term list
+  | TmProj of term * string
 ;;
 
 type command =
@@ -173,6 +174,18 @@ let rec typeof ctx tm = match tm with
 
   | TmTuple terms ->
       TyTuple (List.map (typeof ctx) terms)
+      
+  | TmProj (t, s) ->
+      let tyT = typeof ctx t in
+      (match tyT with
+         | TyTuple tys ->
+             let idx = int_of_string s in
+              if idx > 0 && idx <= List.length tys then
+                List.nth tys (idx - 1)
+             else
+               raise (Type_error "Projection index out of bounds")
+         | _ -> raise (Type_error "Projection applied to non-tuple type"))
+    
 ;;
 
 
@@ -215,7 +228,11 @@ let rec string_of_term = function
       "concat " ^ "(" ^ string_of_term t1 ^ ")" ^ " " ^ "(" ^ string_of_term t2 ^ ")"
   | TmTuple terms -> 
       "{" ^ String.concat ", " (List.map string_of_term terms) ^ "}"
-;;
+  
+  | TmProj (t, s) ->
+      string_of_term t ^ "." ^ s
+  ;;
+
 
 let rec ldif l1 l2 = match l1 with
     [] -> []
@@ -258,7 +275,8 @@ let rec free_vars tm = match tm with
     lunion (free_vars t1) (free_vars t2)
   | TmTuple terms ->
     List.fold_left (fun acc t -> lunion acc (free_vars t)) [] terms
-
+  | TmProj (t, _) ->
+    free_vars t
 ;;
 
 let rec fresh_name x l =
@@ -306,6 +324,8 @@ let rec subst x s tm = match tm with
       TmConcat (subst x s t1, subst x s t2)
   | TmTuple terms ->
       TmTuple (List.map (subst x s) terms)
+  | TmProj (t, string) ->
+      TmProj (subst x s t, string)
 ;;
 
 let rec isnumericval tm = match tm with
@@ -320,7 +340,7 @@ let rec isval tm = match tm with
   | TmAbs _ -> true
   | TmString _-> true
   | t when isnumericval t -> true
-  | TmTuple terms -> List.for_all isval terms 
+  | TmTuple terms -> List.for_all isval terms
   | _ -> false
 ;;
 
@@ -415,10 +435,25 @@ let rec eval1 ctx tm = match tm with
 
   | TmVar s -> 
       getvbinding ctx s
-    
-  (* E-Tuple: Evalúa el primer término no evaluado de la tupla *)
+  
   | TmTuple terms ->
-      TmTuple (List.map (eval1 ctx) terms)
+    let rec eval_terms = function
+      | [] -> raise NoRuleApplies
+      | t :: ts when isval t -> t :: eval_terms ts
+      | t :: ts -> eval1 ctx t :: ts
+    in
+    TmTuple (eval_terms terms)
+
+  | TmProj (TmTuple terms, s) when List.for_all isval terms ->
+      let idx = int_of_string s in
+      if idx > 0 && idx <= List.length terms then
+        List.nth terms (idx - 1)
+      else
+        raise (Type_error "Projection index out of bounds")
+    
+  | TmProj (t, s) ->
+      TmProj (eval1 ctx t, s)
+
   | _ ->
     raise NoRuleApplies
 ;;
@@ -452,3 +487,4 @@ let execute ctx = function
   | Quit -> 
     raise End_of_file
  ;;
+
