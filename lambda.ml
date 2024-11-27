@@ -27,6 +27,7 @@ type term =
   | TmString of string
   | TmConcat of term * term
   | TmTuple of term list
+  | TmRecord of (string * term) list
   | TmProj of term * string
 ;;
 
@@ -228,7 +229,9 @@ let rec string_of_term = function
       "concat " ^ "(" ^ string_of_term t1 ^ ")" ^ " " ^ "(" ^ string_of_term t2 ^ ")"
   | TmTuple terms -> 
       "{" ^ String.concat ", " (List.map string_of_term terms) ^ "}"
-  
+  | TmRecord fields ->
+        "{" ^ (String.concat ", " 
+          (List.map (fun (name, value) -> name ^ "=" ^ string_of_term value) fields)) ^ "}"
   | TmProj (t, s) ->
       string_of_term t ^ "." ^ s
   ;;
@@ -444,6 +447,22 @@ let rec eval1 ctx tm = match tm with
     in
     TmTuple (eval_terms terms)
 
+  | TmRecord fields ->
+      let rec eval_fields = function
+        | [] -> raise NoRuleApplies  (* No hay más reglas para aplicar *)
+        | (name, value) :: rest when isval value -> (name, value) :: eval_fields rest
+        | (name, value) :: rest -> (name, eval1 ctx value) :: rest
+      in
+      TmRecord (eval_fields fields)
+
+  | TmRecordField (record, name) ->
+      (match type_check ctx record with
+       | TyRecord field_types ->
+           (match List.assoc_opt name field_types with
+            | Some ty -> ty
+            | None -> failwith ("Field " ^ name ^ " not found in type"))
+       | _ -> failwith "Expected a record type")
+  
   | TmProj (TmTuple terms, s) when List.for_all isval terms ->
       let idx = int_of_string s in
       if idx > 0 && idx <= List.length terms then

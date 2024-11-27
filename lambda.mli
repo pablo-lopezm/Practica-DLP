@@ -1,10 +1,11 @@
-
+ 
 type ty =
     TyBool
   | TyNat
   | TyArr of ty * ty
   | TyString
   | TyTuple of ty list 
+  | TmRecord of (string * ty) list
 ;;
 
 type term =
@@ -23,6 +24,7 @@ type term =
   | TmString of string
   | TmConcat of term * term
   | TmTuple of term list
+  | TmRecord of (string * term) list
   | TmProj of term * string
 ;;
 
