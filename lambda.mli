@@ -5,7 +5,7 @@ type ty =
   | TyArr of ty * ty
   | TyString
   | TyTuple of ty list 
-  | TmRecord of (string * ty) list
+  | TyRecord of (string * ty) list
 ;;
 
 type term =

@@ -83,6 +83,8 @@ atomicTerm :
       { $2 }
   | LCURLY tupleList RCURLY 
       { TmTuple $2 }
+  | LCURLY recordList RCURLY 
+      { TmRecord $2}
   | TRUE
       { TmTrue }
   | FALSE
@@ -102,9 +104,15 @@ tupleList:
         { [$1] }
     | term COMMA tupleList
         { $1 :: $3 }
-    | /* Nueva regla para lista vacía */
-    /* La lista vacía no consume ningún término */
-    { [] }  
+    | 
+        { [] } 
+
+recordList:
+    | STRINGV EQ term
+        { [($1, $3)] }
+    | STRINGV EQ term COMMA recordList
+        { ($1, $3) :: $5 }
+
 
 ty :
     atomicTy

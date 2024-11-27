@@ -7,6 +7,7 @@ type ty =
   | TyArr of ty * ty
   | TyString
   | TyTuple of ty list 
+  | TyRecord of (string * ty) list
 ;;
 
 
@@ -87,6 +88,9 @@ let rec string_of_ty ty = match ty with
       "String"
   | TyTuple tys -> 
       "{" ^ String.concat ", " (List.map string_of_ty tys) ^ "}"
+  | TyRecord fields -> 
+      "{" ^ (String.concat ", " 
+          (List.map (fun (name, value) -> name ^ ":" ^ (string_of_ty value)) fields)) ^ "}"
 ;;
 
 exception Type_error of string
@@ -175,6 +179,9 @@ let rec typeof ctx tm = match tm with
 
   | TmTuple terms ->
       TyTuple (List.map (typeof ctx) terms)
+
+  | TmRecord fields -> 
+      TyRecord (List.map (fun (name, value) -> (name, typeof ctx value)) fields)
       
   | TmProj (t, s) ->
       let tyT = typeof ctx t in
@@ -231,7 +238,7 @@ let rec string_of_term = function
       "{" ^ String.concat ", " (List.map string_of_term terms) ^ "}"
   | TmRecord fields ->
         "{" ^ (String.concat ", " 
-          (List.map (fun (name, value) -> name ^ "=" ^ string_of_term value) fields)) ^ "}"
+          (List.map (fun (name, value) -> name ^ "=" ^ (string_of_term value)) fields)) ^ "}"
   | TmProj (t, s) ->
       string_of_term t ^ "." ^ s
   ;;
@@ -278,6 +285,8 @@ let rec free_vars tm = match tm with
     lunion (free_vars t1) (free_vars t2)
   | TmTuple terms ->
     List.fold_left (fun acc t -> lunion acc (free_vars t)) [] terms
+  | TmRecord fields -> 
+    List.fold_left (fun acc (name, value) -> lunion acc (free_vars value)) [] fields
   | TmProj (t, _) ->
     free_vars t
 ;;
@@ -327,6 +336,8 @@ let rec subst x s tm = match tm with
       TmConcat (subst x s t1, subst x s t2)
   | TmTuple terms ->
       TmTuple (List.map (subst x s) terms)
+  | TmRecord fields -> 
+      TmRecord (List.map (fun (name, value) -> (name, subst x s value)) fields)
   | TmProj (t, string) ->
       TmProj (subst x s t, string)
 ;;
@@ -344,6 +355,7 @@ let rec isval tm = match tm with
   | TmString _-> true
   | t when isnumericval t -> true
   | TmTuple terms -> List.for_all isval terms
+  | TmRecord fields -> List.for_all (fun (name, value) -> isval value) fields
   | _ -> false
 ;;
 
@@ -455,21 +467,30 @@ let rec eval1 ctx tm = match tm with
       in
       TmRecord (eval_fields fields)
 
-  | TmRecordField (record, name) ->
+  (*| TmRecordField (record, name) ->
       (match type_check ctx record with
        | TyRecord field_types ->
            (match List.assoc_opt name field_types with
             | Some ty -> ty
             | None -> failwith ("Field " ^ name ^ " not found in type"))
-       | _ -> failwith "Expected a record type")
+       | _ -> failwith "Expected a record type")*)
   
-  | TmProj (TmTuple terms, s) when List.for_all isval terms ->
+  | TmProj (TmTuple terms, s) when List.for_all isval terms -> 
       let idx = int_of_string s in
-      if idx > 0 && idx <= List.length terms then
-        List.nth terms (idx - 1)
-      else
-        raise (Type_error "Projection index out of bounds")
-    
+    if idx > 0 && idx <= List.length terms then
+      List.nth terms (idx - 1)
+    else
+      raise (Type_error ("type error: index" ^ s ^ "not found"))
+
+  
+  | TmProj (TmRecord terms, s) when List.for_all (fun (name, value) -> isval value) terms ->
+      (try 
+        List.assoc s terms
+      with 
+      | Not_found  -> 
+        raise (Type_error ("type error: label" ^ s ^ "not found")))
+
+      
   | TmProj (t, s) ->
       TmProj (eval1 ctx t, s)
 
