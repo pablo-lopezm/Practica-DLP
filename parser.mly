@@ -43,7 +43,7 @@
 s :
     IDV EQ term EOF
       { Bind ($1, $3) }
-    |term EOF
+    | term EOF
       { Eval $1 }
     | QUIT EOF
       { Quit }
@@ -75,16 +75,18 @@ appTerm :
       { TmConcat ($2, $3) }
   | appTerm atomicTerm
       { TmApp ($1, $2) }
+  | appTerm DOT IDV
+      { TmProj ($1, $3) }
   | appTerm DOT INTV
       { TmProj ($1, string_of_int $3) }
 
 atomicTerm :
     LPAREN term RPAREN
       { $2 }
-  | LCURLY tupleList RCURLY 
+  | LCURLY recordList RCURLY
+      {  TmRecord $2 }
+  | LCURLY tupleList RCURLY
       { TmTuple $2 }
-  | LCURLY recordList RCURLY 
-      { TmRecord $2}
   | TRUE
       { TmTrue }
   | FALSE
@@ -97,7 +99,13 @@ atomicTerm :
           | n -> TmSucc (f (n-1))
         in f $1 }
   | STRINGV
-        { TmString $1 }
+      { TmString $1 }
+
+recordList:
+    | IDV EQ term
+        { [($1, $3)] }
+    | IDV EQ term COMMA recordList
+        { ($1, $3) :: $5 }
 
 tupleList:
     | term
@@ -106,13 +114,6 @@ tupleList:
         { $1 :: $3 }
     | 
         { [] } 
-
-recordList:
-    | STRINGV EQ term
-        { [($1, $3)] }
-    | STRINGV EQ term COMMA recordList
-        { ($1, $3) :: $5 }
-
 
 ty :
     atomicTy

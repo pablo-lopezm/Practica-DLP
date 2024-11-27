@@ -9,11 +9,11 @@ let read_until_double_semicolon () =
   let rec loop acc =
     let line = read_line () in
     if String.length line >= 2 && String.sub line (String.length line - 2) 2 = ";;" then
-      (* Retornamos la concatenación de las líneas acumuladas sin el ";;" *)
+      (* Retornamos la concatenacion de las lineas acumuladas sin el ";;" *)
       String.concat " " (List.rev (line::acc))
       |> fun str -> String.sub str 0 (String.length str - 2)  (* Eliminamos el ";;" *)
     else
-      loop (line::acc)  (* Acumulamos las líneas *)
+      loop (line::acc)  (* Acumulamos las lineas *)
   in
     loop []
 

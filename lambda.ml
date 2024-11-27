@@ -6,8 +6,8 @@ type ty =
   | TyNat
   | TyArr of ty * ty
   | TyString
-  | TyTuple of ty list 
   | TyRecord of (string * ty) list
+  | TyTuple of ty list 
 ;;
 
 
@@ -27,8 +27,8 @@ type term =
   | TmFix of term
   | TmString of string
   | TmConcat of term * term
-  | TmTuple of term list
   | TmRecord of (string * term) list
+  | TmTuple of term list
   | TmProj of term * string
 ;;
 
@@ -177,23 +177,27 @@ let rec typeof ctx tm = match tm with
       if typeof ctx t1 = TyString && typeof ctx t2 = TyString then TyString 
       else raise (Type_error "argument of concat is not a string")
 
-  | TmTuple terms ->
-      TyTuple (List.map (typeof ctx) terms)
-
   | TmRecord fields -> 
       TyRecord (List.map (fun (name, value) -> (name, typeof ctx value)) fields)
-      
+
+  | TmTuple terms ->
+      TyTuple (List.map (typeof ctx) terms)
+ 
   | TmProj (t, s) ->
-      let tyT = typeof ctx t in
-      (match tyT with
-         | TyTuple tys ->
-             let idx = int_of_string s in
-              if idx > 0 && idx <= List.length tys then
-                List.nth tys (idx - 1)
-             else
-               raise (Type_error "Projection index out of bounds")
-         | _ -> raise (Type_error "Projection applied to non-tuple type"))
-    
+    let tyT = typeof ctx t in
+    match tyT with
+    | TyTuple tys ->
+        let idx = int_of_string s in
+        if idx > 0 && idx <= List.length tys then
+          List.nth tys (idx - 1)
+        else
+          raise (Type_error "Projection index out of bounds")
+    | TyRecord fields ->
+        (match List.assoc_opt s fields with
+         | Some ty -> ty
+         | None -> raise (Type_error ("Field '" ^ s ^ "' not found in record")))
+    | _ ->
+        raise (Type_error "Projection applied to non-tuple or non-record type")
 ;;
 
 

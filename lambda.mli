@@ -4,8 +4,9 @@ type ty =
   | TyNat
   | TyArr of ty * ty
   | TyString
-  | TyTuple of ty list 
   | TyRecord of (string * ty) list
+  | TyTuple of ty list 
+  
 ;;
 
 type term =
@@ -23,8 +24,8 @@ type term =
   | TmFix of term
   | TmString of string
   | TmConcat of term * term
-  | TmTuple of term list
   | TmRecord of (string * term) list
+  | TmTuple of term list
   | TmProj of term * string
 ;;
 
