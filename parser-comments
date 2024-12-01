@@ -1,0 +1,25 @@
+  | term cases
+      { TmCase ($1, $2)}
+
+cases : 
+    case 
+      { [$1] }
+    | case OR cases
+        {$1 :: $3}
+
+case: 
+    LT IDV EQ IDV GT DARROW appTerm
+        { ($2, $4, $7)}
+
+TyRecord
+
+recordListTy:
+    IDT EQ ty recordListTy
+        { [] }
+
+abs = L i : int
+    case i of 
+        <pos=p> => false
+        <zero=z> => true 
+
+;;

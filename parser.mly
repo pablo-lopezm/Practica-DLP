@@ -18,6 +18,10 @@
 %token BOOL
 %token NAT
 %token STRING
+%token CASE
+%token OF
+%token AS
+%token OR
 %token QUIT
 
 %token LPAREN
@@ -28,12 +32,16 @@
 %token COMMA
 %token EQ
 %token COLON
+%token GT
+%token LT
+%token DARROW
 %token ARROW
 %token EOF
 
 %token <int> INTV
 %token <string> IDV
 %token <string> STRINGV
+%token <string> IDT
 
 %start s
 %type <Lambda.command> s
@@ -45,6 +53,8 @@ s :
       { Bind ($1, $3) }
     | term EOF
       { Eval $1 }
+    | IDT EQ ty EOF
+      { TBind ($1, $3)}
     | QUIT EOF
       { Quit }
 
@@ -60,6 +70,18 @@ term :
       { TmLetIn ($2, $4, $6) }
   | LETREC IDV COLON ty EQ term IN term
       { TmLetIn ($2, TmFix (TmAbs ($2, $4, $6)), $8) }
+  | CASE term OF cases 
+      { TmCase ($2, $4) } 
+      
+cases: 
+    case 
+      { [$1] } 
+  | case OR cases 
+      { $1 :: $3 } 
+
+case: 
+    LT IDV EQ IDV GT DARROW appTerm 
+      { ($2, $4, $7) }
 
 
 appTerm :
@@ -80,6 +102,7 @@ appTerm :
   | appTerm DOT INTV
       { TmProj ($1, string_of_int $3) }
 
+
 atomicTerm :
     LPAREN term RPAREN
       { $2 }
@@ -87,6 +110,8 @@ atomicTerm :
       {  TmRecord $2 }
   | LCURLY tupleList RCURLY
       { TmTuple $2 }
+  | LT IDV EQ term GT AS ty
+      { TmVariant ($2, $4, $7)}
   | TRUE
       { TmTrue }
   | FALSE
@@ -102,23 +127,28 @@ atomicTerm :
       { TmString $1 }
 
 recordList:
-    | IDV EQ term
-        { [($1, $3)] }
-    | IDV EQ term COMMA recordList
-        { ($1, $3) :: $5 }
+    recordTerm
+        {[$1]}
+    | recordTerm COMMA recordList
+        { $1 :: $3 }
+    | {[]}
+
+recordTerm: 
+    IDV EQ term
+        { ($1, $3) }
+    
 
 tupleList:
     | term
         { [$1] }
     | term COMMA tupleList
         { $1 :: $3 }
-    | 
-        { [] } 
+
 
 ty :
     atomicTy
       { $1 }
-  | atomicTy ARROW ty
+  | atomicTy ARROW ty 
       { TyArr ($1, $3) }
 
 atomicTy :
@@ -130,11 +160,32 @@ atomicTy :
       { TyNat }
   | STRING
       { TyString }
+  | LCURLY recordListTy RCURLY
+      { TyRecord $2 }
+  | LT recordListTy GT
+      { TyVariant $2 }
   | LCURLY tyList RCURLY
       { TyTuple $2 }
+  | IDT 
+    { TyVar ($1)}
+    
 
 tyList:
-    ty
+  | ty
       { [$1] }
   | ty COMMA tyList
       { $1 :: $3 }
+
+recordListTy:
+    |  { [] }
+    | recordTy
+        { [$1] }
+    | recordTy COMMA recordListTy
+        { $1 :: $3}
+
+recordTy:
+    IDV COLON ty
+        { ($1, $3) }
+
+
+

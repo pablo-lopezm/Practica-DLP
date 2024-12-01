@@ -8,8 +8,9 @@ type ty =
   | TyString
   | TyRecord of (string * ty) list
   | TyTuple of ty list 
+  | TyVar of string
+  | TyVariant of (string * ty) list
 ;;
-
 
 
 type term =
@@ -30,12 +31,14 @@ type term =
   | TmRecord of (string * term) list
   | TmTuple of term list
   | TmProj of term * string
+  | TmVariant of string * term * ty (*TmVariant*)
+  | TmCase of term * (string * string * term) list
 ;;
 
 type command =
   Eval of term
   | Bind of string * term
-  (* | TBind of string * ty variable de tipos*)
+  | TBind of string * ty (*variable de tipos*)
   | Quit
 ;;
 
@@ -74,27 +77,98 @@ let getvbinding ctx s =
     | _ -> raise Not_found
 ;;
 
+exception Type_error of string
+;;
+
+
+let rec base_ty ctx ty = match ty with
+  TyBool -> TyBool
+  | TyNat -> TyNat
+  | TyString -> TyString
+  | TyArr (ty1, ty2) -> TyArr (base_ty ctx ty1, base_ty ctx ty2)
+  | TyTuple tys -> TyTuple (List.map (base_ty ctx) tys)
+  | TyRecord tys -> TyRecord (List.map (fun (s, ty) -> (s, base_ty ctx ty)) tys)
+  | TyVariant tys -> TyVariant (List.map (fun (s, ty) -> (s, base_ty ctx ty)) tys)
+  | TyVar s -> (try gettbinding ctx s with _ -> raise (Type_error ("no binding type for variable " ^s)))
+  (*| TyList ty -> TyList (base_ty ctx ty)*)
+;;
 
 (* TYPE MANAGEMENT (TYPING) *)
 
-let rec string_of_ty ty = match ty with
+let rec string_of_ty ctx ty = match ty with
     TyBool ->
       "Bool"
   | TyNat ->
       "Nat"
   | TyArr (ty1, ty2) ->
-      string_of_ty ty1 ^ " -> " ^ string_of_ty ty2 
+      string_of_ty ctx ty1 ^ " -> " ^ string_of_ty ctx ty2 
   | TyString -> 
       "String"
   | TyTuple tys -> 
-      "{" ^ String.concat ", " (List.map string_of_ty tys) ^ "}"
+      "{" ^ String.concat ", " (List.map (string_of_ty ctx) tys) ^ "}"
   | TyRecord fields -> 
       "{" ^ (String.concat ", " 
-          (List.map (fun (name, value) -> name ^ ":" ^ (string_of_ty value)) fields)) ^ "}"
-;;
+          (List.map (fun (name, value) -> name ^ ":" ^ (string_of_ty ctx value)) fields)) ^ "}" 
+  | TyVar s ->  string_of_ty ctx (base_ty ctx ty)
+  | TyVariant variants ->
+    "<" ^ (String.concat " | " (List.map (fun (name, ty) -> name ^ ":" ^ string_of_ty ctx ty) variants)) ^ ">"
 
-exception Type_error of string
-;;
+;; 
+
+let rec string_of_term ctx = function
+    TmTrue ->
+      "true"
+  | TmFalse ->
+      "false"
+  | TmIf (t1,t2,t3) -> 
+      "if " ^ "(" ^ string_of_term ctx t1 ^ ")" ^
+      " then " ^ "(" ^ string_of_term ctx t2 ^ ")" ^
+      " else " ^ "(" ^ string_of_term ctx t3 ^ ")"
+  | TmZero ->
+      "0"
+  | TmSucc t ->
+     let rec f n t' = match t' with
+          TmZero -> string_of_int n
+        | TmSucc s -> f (n+1) s
+        | _ -> "succ " ^ "(" ^ string_of_term ctx t ^ ")"
+      in f 1 t
+  | TmPred t ->
+      "pred " ^ "(" ^ string_of_term ctx t ^ ")"
+  | TmIsZero t ->
+      "iszero " ^ "(" ^ string_of_term ctx t ^ ")"
+  | TmVar s ->
+      s
+  | TmAbs (s, tyS, t) -> (match tyS with 
+     TyVar string -> "(lambda " ^ s ^ ":" ^ string ^ ". " ^ string_of_term ctx t ^ ")"
+    | _ -> "(lambda " ^ s ^ ":" ^ string_of_ty ctx tyS ^ ". " ^ string_of_term ctx t ^ ")")
+      
+  | TmApp (t1, t2) ->
+      "(" ^ string_of_term ctx t1 ^ " " ^ string_of_term ctx t2 ^ ")"
+  | TmLetIn (s, t1, t2) ->
+      "let " ^ s ^ " = " ^ string_of_term ctx t1 ^ " in " ^ string_of_term ctx t2
+  | TmFix t ->
+      "(fix " ^ string_of_term ctx t ^ ")"
+  | TmString s -> 
+    "\"" ^ s ^ "\""
+  | TmConcat (t1, t2) -> 
+      "concat " ^ "(" ^ string_of_term ctx t1 ^ ")" ^ " " ^ "(" ^ string_of_term ctx t2 ^ ")"
+  | TmTuple terms -> 
+      "{" ^ String.concat ", " (List.map (string_of_term ctx) terms) ^ "}"
+  | TmRecord fields ->
+        "{" ^ (String.concat ", " 
+          (List.map (fun (name, value) -> name ^ "=" ^ (string_of_term ctx value)) fields)) ^ "}"
+  | TmProj (t, s) ->
+      string_of_term ctx t ^ "." ^ s
+  | TmVariant (s,tm, ty) -> "<" ^ s ^ "=" ^ string_of_term ctx tm ^ ">" 
+  | TmCase (t, cases) -> 
+    let case = List.map (fun (label, label_value, term) -> 
+       string_of_term ctx term) cases in
+    let cases_string = String.concat " | " case in 
+    "case " ^ (string_of_term ctx t) ^ " of " ^ cases_string
+
+
+  ;;
+
 
 let rec typeof ctx tm = match tm with
     (* T-True *)
@@ -140,9 +214,10 @@ let rec typeof ctx tm = match tm with
 
     (* T-Abs *)
   | TmAbs (x, tyT1, t2) ->
+      let btyT1 = base_ty ctx tyT1 in
       let ctx' = addtbinding ctx x tyT1 in
       let tyT2 = typeof ctx' t2 in
-      TyArr (tyT1, tyT2)
+      TyArr (btyT1, tyT2)
 
     (* T-App *)
   | TmApp (t1, t2) ->
@@ -185,67 +260,70 @@ let rec typeof ctx tm = match tm with
  
   | TmProj (t, s) ->
     let tyT = typeof ctx t in
-    match tyT with
+    (match tyT with
     | TyTuple tys ->
         let idx = int_of_string s in
         if idx > 0 && idx <= List.length tys then
           List.nth tys (idx - 1)
         else
           raise (Type_error "Projection index out of bounds")
+
     | TyRecord fields ->
         (match List.assoc_opt s fields with
          | Some ty -> ty
          | None -> raise (Type_error ("Field '" ^ s ^ "' not found in record")))
     | _ ->
-        raise (Type_error "Projection applied to non-tuple or non-record type")
+        raise (Type_error "Projection applied to non-tuple or non-record type"))
+
+  | TmVariant (s, t, ty) ->
+       let tyT1 = typeof ctx t in 
+       let tyT2 = base_ty ctx ty in 
+       (match tyT2 with 
+         TyVariant l ->
+          (try if tyT1 = List.assoc s l then tyT2
+          else raise (Type_error "type mismatch in variant") 
+          with 
+          Not_found -> raise (Type_error ("case" ^ s ^ "not found")))
+
+       | _ -> raise (Type_error "variant expected"))
+
+ | TmCase (t, cases) ->
+    let tyT1 = typeof ctx t in
+
+    (match (base_ty ctx tyT1) with
+     | TyVariant variants ->
+         let vtags = List.map fst variants in
+         let ctags = List.map (fun (tag, _, _) -> tag) cases in
+         let missing_tags = List.filter (fun tag -> not (List.mem tag ctags)) vtags in
+         let extra_tags = List.filter (fun tag -> not (List.mem tag vtags)) ctags in
+         if missing_tags <> [] then
+           raise (Type_error ("Faltan casos para etiquetas: " ^ String.concat ", " missing_tags));
+         if extra_tags <> [] then
+           raise (Type_error ("Etiquetas no válidas en casos: " ^ String.concat ", " extra_tags));
+         (* Verificar los tipos de cada rama *)
+         let ty_result =
+           List.fold_left (fun acc (tag, var, body) ->
+             let var_ty = List.assoc tag variants in
+             let ctx' = addtbinding ctx var var_ty in
+             let body_ty = typeof ctx' body in
+             match acc with
+             | None -> Some body_ty
+             | Some ty when ty = body_ty -> Some ty
+             | Some ty ->
+                 raise (Type_error "Los tipos de las ramas en TmCase no coinciden")
+           ) None cases
+         in
+         (match ty_result with
+          | Some ty -> ty
+          | None -> raise (Type_error "TmCase sin ramas válidas"))
+     | pepe ->
+         raise (Type_error "Se esperaba un TyVariant en TmCase"))
+
+
 ;;
 
 
 (* TERMS MANAGEMENT (EVALUATION) *)
-
-let rec string_of_term = function
-    TmTrue ->
-      "true"
-  | TmFalse ->
-      "false"
-  | TmIf (t1,t2,t3) -> 
-      "if " ^ "(" ^ string_of_term t1 ^ ")" ^
-      " then " ^ "(" ^ string_of_term t2 ^ ")" ^
-      " else " ^ "(" ^ string_of_term t3 ^ ")"
-  | TmZero ->
-      "0"
-  | TmSucc t ->
-     let rec f n t' = match t' with
-          TmZero -> string_of_int n
-        | TmSucc s -> f (n+1) s
-        | _ -> "succ " ^ "(" ^ string_of_term t ^ ")"
-      in f 1 t
-  | TmPred t ->
-      "pred " ^ "(" ^ string_of_term t ^ ")"
-  | TmIsZero t ->
-      "iszero " ^ "(" ^ string_of_term t ^ ")"
-  | TmVar s ->
-      s
-  | TmAbs (s, tyS, t) ->
-      "(lambda " ^ s ^ ":" ^ string_of_ty tyS ^ ". " ^ string_of_term t ^ ")"
-  | TmApp (t1, t2) ->
-      "(" ^ string_of_term t1 ^ " " ^ string_of_term t2 ^ ")"
-  | TmLetIn (s, t1, t2) ->
-      "let " ^ s ^ " = " ^ string_of_term t1 ^ " in " ^ string_of_term t2
-  | TmFix t ->
-      "(fix " ^ string_of_term t ^ ")"
-  | TmString s -> 
-    "\"" ^ s ^ "\""
-  | TmConcat (t1, t2) -> 
-      "concat " ^ "(" ^ string_of_term t1 ^ ")" ^ " " ^ "(" ^ string_of_term t2 ^ ")"
-  | TmTuple terms -> 
-      "{" ^ String.concat ", " (List.map string_of_term terms) ^ "}"
-  | TmRecord fields ->
-        "{" ^ (String.concat ", " 
-          (List.map (fun (name, value) -> name ^ "=" ^ (string_of_term value)) fields)) ^ "}"
-  | TmProj (t, s) ->
-      string_of_term t ^ "." ^ s
-  ;;
 
 
 let rec ldif l1 l2 = match l1 with
@@ -293,6 +371,13 @@ let rec free_vars tm = match tm with
     List.fold_left (fun acc (name, value) -> lunion acc (free_vars value)) [] fields
   | TmProj (t, _) ->
     free_vars t
+  | TmVariant (s, tm, ty) ->
+     free_vars tm
+  | TmCase (t, cases) ->
+    lunion (free_vars t)
+      (List.fold_left
+          (fun acc (s1, s2, body) ->
+              lunion acc (ldif (free_vars body) [s1; s2])) [] cases)
 ;;
 
 let rec fresh_name x l =
@@ -344,6 +429,11 @@ let rec subst x s tm = match tm with
       TmRecord (List.map (fun (name, value) -> (name, subst x s value)) fields)
   | TmProj (t, string) ->
       TmProj (subst x s t, string)
+  | TmVariant (label, t, ty) -> TmVariant (label, subst x s t, ty)
+  | TmCase (t, cases) ->
+      TmCase (subst x s t,
+            List.map (fun (label,label2, body) -> (label, label2, subst x s body)) cases)
+
 ;;
 
 let rec isnumericval tm = match tm with
@@ -358,6 +448,7 @@ let rec isval tm = match tm with
   | TmAbs _ -> true
   | TmString _-> true
   | t when isnumericval t -> true
+  | TmVariant (string, term, ty) -> isval term 
   | TmTuple terms -> List.for_all isval terms
   | TmRecord fields -> List.for_all (fun (name, value) -> isval value) fields
   | _ -> false
@@ -413,6 +504,7 @@ let rec eval1 ctx tm = match tm with
 
     (* E-AppAbs *)
   | TmApp (TmAbs(x, _, t12), v2) when isval v2 ->
+      print_endline("abs");
       subst x v2 t12
 
     (* E-App2: evaluate argument before applying function *)
@@ -498,6 +590,16 @@ let rec eval1 ctx tm = match tm with
   | TmProj (t, s) ->
       TmProj (eval1 ctx t, s)
 
+  | TmCase (TmVariant (label, v, ty), cases) when isval v ->
+    (match List.find_opt (fun (case_label, _, _) -> case_label = label) cases with
+      | Some (_, var, body) -> subst var v body
+      | None -> raise NoRuleApplies)
+    
+  | TmCase (t, cases) -> 
+        let t' = eval1 ctx t in
+        TmCase (t', cases)
+
+
   | _ ->
     raise NoRuleApplies
 ;;
@@ -519,14 +621,19 @@ let execute ctx = function
   Eval tm ->
     let tyTm = typeof ctx tm in 
     let tm' = eval ctx tm in 
-    (*pretty printer*) print_endline("- : " ^ string_of_ty tyTm ^ " = " ^ string_of_term tm');
+    (*pretty printer*) print_endline("- : " ^ string_of_ty ctx tyTm ^ " = " ^ string_of_term ctx tm');
     ctx 
 
   | Bind(s, tm) ->
-    let tyTm = typeof ctx tm in 
+    let tyTm = typeof ctx tm in
     let tm' = eval ctx tm in 
-    (*pretty printer*) print_endline(s ^ " : " ^ string_of_ty tyTm ^ " = " ^ string_of_term tm');
+    (*pretty printer*) print_endline(s ^ " : " ^ string_of_ty ctx tyTm ^ " = " ^ string_of_term ctx tm');
     addvbinding ctx s tyTm tm'
+  
+  | TBind (s, tyVar) ->
+      let bty = base_ty ctx tyVar in 
+      print_endline("type " ^ s ^ " = " ^ string_of_ty ctx bty);
+      addtbinding ctx s bty
     
   | Quit -> 
     raise End_of_file

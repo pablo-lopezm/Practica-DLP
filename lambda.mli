@@ -6,7 +6,8 @@ type ty =
   | TyString
   | TyRecord of (string * ty) list
   | TyTuple of ty list 
-  
+  | TyVar of string
+  | TyVariant of (string * ty) list
 ;;
 
 type term =
@@ -27,11 +28,14 @@ type term =
   | TmRecord of (string * term) list
   | TmTuple of term list
   | TmProj of term * string
+  | TmVariant of string * term * ty
+  | TmCase of term * (string * string * term) list
 ;;
 
 type command = 
   Eval of term
   | Bind of string * term
+  | TBind of string * ty
   | Quit
 ;;
 
@@ -50,11 +54,11 @@ val addvbinding : context -> string -> ty -> term -> context;;
 val gettbinding : context -> string -> ty;;
 val getvbinding : context -> string -> term;;
 
-val string_of_ty : ty -> string;;
+val string_of_ty : context -> ty -> string;;
 exception Type_error of string;;
 val typeof : context -> term -> ty;;
 
-val string_of_term : term -> string;;
+val string_of_term : context -> term -> string;;
 exception NoRuleApplies;;
 val eval : context -> term -> term;;
 
