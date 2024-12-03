@@ -25,11 +25,18 @@ rule token = parse
   | "Bool"      { BOOL }
   | "Nat"       { NAT }
   | "String"    { STRING }
+  | "nil"       { NIL }
+  | "cons"      { CONS }
+  | "head"      { HEAD }
+  | "tail"      { TAIL }
+  | "isnil"     { ISNIL }
   | "quit"      { QUIT }
   | '('         { LPAREN }
   | ')'         { RPAREN }
   | '{'         { LCURLY }
   | '}'         { RCURLY }
+  | '['         { LBRACKET }
+  | ']'         { RBRACKET }
   | '.'         { DOT }
   | ','         { COMMA }
   | '='         { EQ }

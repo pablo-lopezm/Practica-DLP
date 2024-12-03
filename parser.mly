@@ -22,12 +22,19 @@
 %token OF
 %token AS
 %token OR
+%token NIL 
+%token CONS
+%token HEAD
+%token TAIL 
+%token ISNIL 
 %token QUIT
 
 %token LPAREN
 %token RPAREN
 %token LCURLY
 %token RCURLY
+%token LBRACKET
+%token RBRACKET
 %token DOT
 %token COMMA
 %token EQ
@@ -101,6 +108,12 @@ appTerm :
       { TmProj ($1, $3) }
   | appTerm DOT INTV
       { TmProj ($1, string_of_int $3) }
+  | ISNIL LBRACKET ty RBRACKET atomicTerm
+    { TmIsNil ($3, $5) }
+  | HEAD LBRACKET ty RBRACKET atomicTerm
+    { TmHead ($3, $5) }
+  | TAIL LBRACKET ty RBRACKET atomicTerm
+    { TmTail ($3, $5) }
 
 
 atomicTerm :
@@ -125,6 +138,11 @@ atomicTerm :
         in f $1 }
   | STRINGV
       { TmString $1 }
+  | NIL LBRACKET ty RBRACKET 
+      {  TmNil ($3) }
+  | CONS LBRACKET ty RBRACKET atomicTerm atomicTerm
+      {  TmCons ($3, $5, $6) }
+
 
 recordList:
     recordTerm
