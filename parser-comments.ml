@@ -29,3 +29,17 @@ sum =
   letrec sum : Nat -> Nat -> Nat = 
     lambda n : Nat. lambda m : Nat. if iszero n then m else succ (sum (pred n) m)
 in sum;;
+
+
+(*  TODO ESTO EN EXAMPLES Y EN LA MEMORIA FINAL 
+
+lambda expresión que calcule el producto de dos números naturales prod 
+ lambda expresión que calcule el n termino de la serie de Fibonacci
+ lambda expresión que calcule el factorial
+ funcion recursiva add Int -> Int -> Int (la que tenemos)
+ apartado listas length, append y map.
+ Dos lambda expresiones que involucren operaciones de subtipado
+ 
+ MANUAL DE USUARIO (NUEVAS FUNCIONALIDADES DEL INERPRETE,
+ Comentarios en el código bien explicados en inglés
+ *)

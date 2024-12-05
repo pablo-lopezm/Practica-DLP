@@ -53,7 +53,6 @@ let rec print_term = function
       print_term t;
       print_space ();
       print_string "of";
-      print_space ();
       print_cases cases;
       close_box ();
 
