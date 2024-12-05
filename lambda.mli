@@ -54,18 +54,16 @@ type context =
   (string * binding) list
 ;;
 
+
 val emptyctx : context;;
 val addtbinding : context -> string -> ty -> context;;
 val addvbinding : context -> string -> ty -> term -> context;;
 val gettbinding : context -> string -> ty;;
 val getvbinding : context -> string -> term;;
 
-val string_of_ty : context -> ty -> string;;
+val base_ty : context -> ty -> ty;;
 exception Type_error of string;;
 val typeof : context -> term -> ty;;
 
-val string_of_term : context -> term -> string;;
 exception NoRuleApplies;;
 val eval : context -> term -> term;;
-
-val execute : context -> command -> context;;

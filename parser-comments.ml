@@ -29,28 +29,3 @@ sum =
   letrec sum : Nat -> Nat -> Nat = 
     lambda n : Nat. lambda m : Nat. if iszero n then m else succ (sum (pred n) m)
 in sum;;
-
-| TmCase (t, cases) -> 
-	let tyT1 = typeof ctx t in 
-	(match tyT1 with 
-		TyVariant l -> 
-			let vtags = List.map (function (tag, _) -> tag) l in 
-			let ctags = List.map (function (tag, _,_) -> tag) cases in 
-			if List.lengths vtags = LIst.lengths ctags && List.for_all (function tag -> List.mem tag vtags) ctags
-			then
-				let (tag1, id1, tm1) = List.hd cases in
-				let ty1 = List.assoc tag1 l in
-				let ctx1 = addtbinding ctx id1 ty1 in 
-				let rty = typeof ctx1 tm1 in 
-				let rec aux = function
-					[] -> rty
-					| (tagi, idi, tmi)::rest -> 
-						let ty1 = List.assoc tagi l in
-						let ctxi = addtbinding ctx idi tyi in 
-						let tyi = typeof ctxi tmi in
-						if tyi = rty then aux rest
-						else raise (Type_error "cases return different types")
-					in aux (List.tl cases)
-				else 
-					raise (Type_error "variant and cases have different tags")
-		| _ -> raiise (Type_error "variant expected"))

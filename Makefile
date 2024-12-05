@@ -1,9 +1,16 @@
 
-all: lambda parser lexer main
-	ocamlc -o top lambda.cmo parser.cmo lexer.cmo main.cmo
+all: lambda prettyprinter execute parser lexer main
+	ocamlc -o top lambda.cmo prettyPrinter.cmo execute.cmo parser.cmo lexer.cmo main.cmo
 
 lambda: lambda.ml lambda.mli
 	ocamlc -c lambda.mli lambda.ml
+
+prettyprinter: prettyPrinter.ml	
+	ocamlc -c prettyPrinter.ml
+
+execute: execute.ml
+	ocamlc -c execute.ml
+
 
 parser: parser.mly
 	ocamlyacc parser.mly

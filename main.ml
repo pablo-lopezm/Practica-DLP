@@ -2,6 +2,7 @@ open Parsing;;
 open Lexing;;
 
 open Lambda;;
+open Execute;;
 open Parser;;
 open Lexer;;
 

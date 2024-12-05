@@ -185,7 +185,7 @@ atomicTy :
   | LCURLY tyList RCURLY
       { TyTuple $2 }
   | IDT 
-    { TyVar ($1)}
+        {TyVar ($1)}
     
 
 tyList:
