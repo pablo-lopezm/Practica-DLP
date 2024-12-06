@@ -1,6 +1,19 @@
 open Format 
 open Lambda 
 
+(* 
+   This code provides functions to pretty-print terms and types for a lambda 
+   calculus language. It handles different expressions like conditionals, 
+   abstractions, let bindings, and various data types such as booleans, integers, 
+   strings, tuples, and records.
+
+   The functions print each term or type with proper formatting, using indentation 
+   to improve readability. Special cases like counting `TmSucc` terms and printing 
+   fixpoint terms (`TmFix`) are also handled. Additionally, it includes functions 
+   for printing evaluation steps and bindings, making it useful for debugging or 
+   understanding the code's behavior.
+*)
+
 let rec print_term = function 
 
    TmIf (t1, t2, t3) ->
@@ -47,14 +60,14 @@ let rec print_term = function
         close_box();
 
     | TmCase (t, cases) ->
-      open_box 1;
-      print_string "case";
-      print_space ();
-      print_term t;
-      print_space ();
-      print_string "of";
-      print_cases cases;
-      close_box ();
+        open_box 1;
+        print_string "case";
+        print_space ();
+        print_term t;
+        print_space ();
+        print_string "of";
+        print_cases cases;
+        close_box ();
 
     | TmFix term -> 
         open_box 1;
@@ -75,7 +88,8 @@ let rec print_term = function
 and print_cases cases =
   match cases with
     [] -> () 
-    | [(label, idv, appTerm)] ->
+
+    | [(label, idv, appTerm)] -> (* Unique case *)
       print_string "<";
       print_string label;
       print_string "=";
@@ -84,8 +98,9 @@ and print_cases cases =
       print_space ();
       print_string "->";
       print_space ();
-      print_appterm appTerm; (* Un único caso *)
-    | (label, idv, appTerm) :: rest ->
+      print_appterm appTerm; 
+
+    | (label, idv, appTerm) :: rest -> (* Various cases *)
       print_string "<";
       print_string label;
       print_string "=";
@@ -95,7 +110,7 @@ and print_cases cases =
       print_string "->";
       print_space ();
       print_appterm appTerm;
-      print_string " | "; (* Separador entre casos *)
+      print_string " | "; 
       print_cases rest;
 
 
@@ -167,6 +182,7 @@ and print_appterm = function
       print_space ();
       print_atomic_term atomicTerm;
       close_box();
+
   | atomicTerm ->
     print_atomic_term atomicTerm
 
@@ -177,12 +193,14 @@ and print_atomic_term = function
        print_recordList recordList;
        print_string "}";
        close_box ();
+
   | TmTuple(tupleList) ->
       open_box 1;
       print_string "{";
       print_List tupleList;
       print_string "}";
       close_box ();
+
   | TmVariant(idv, term, _) ->
       open_box 1;
       print_string "<";
@@ -193,18 +211,22 @@ and print_atomic_term = function
       print_term term;
       print_string ">";
       close_box ();
+
   | TmTrue -> 
       open_box 1;
       print_string "true";
       close_box ();
+
   | TmFalse ->
       open_box 1;
       print_string "false";
       close_box ();
+
   | TmVar s ->
       open_box 1;
       print_string s;
       close_box ();
+
   | TmZero -> 
       open_box 1;
       print_string "0";
@@ -214,16 +236,19 @@ and print_atomic_term = function
     let rec count_succ n t' = 
       match t' with
       | TmZero -> 
-        print_string (string_of_int n) (* Si llegamos a `TmZero`, imprimimos el número acumulado *)
+        print_string (string_of_int n)
+
       | TmSucc s -> 
-        count_succ (n + 1) s (* Seguimos contando los `TmSucc` *)
+        count_succ (n + 1) s 
+
       | _ -> 
-        (* Si no es `TmZero` ni `TmSucc`, imprimimos el término completo *)
+        (* If not  `TmZero` | `TmSucc`, print the whole term *)
         open_box 1;
         print_string "succ";
         print_space();
         print_term t;
         close_box();
+
       in 
         count_succ 1 t
 
@@ -233,12 +258,14 @@ and print_atomic_term = function
       print_string string;
       print_string "\"";
       close_box ();
+
   | TmNil(ty) ->
       open_box 1;
       print_string "nil[";
       print_ty ty;
       print_string "]";
       close_box ();
+
   | TmCons(ty,atomicTerm1, atomicTerm2 ) ->
       open_box 1;
       print_string "cons[";
@@ -263,11 +290,13 @@ and print_recordList recordList =
   match recordList with
      [] ->
         () 
+
     | [(label, term)] ->
         print_string label;
         print_string "=";
         print_space();
         print_term term 
+
     | (label, term) :: rest ->
         print_string label;
         print_string "=";
@@ -281,8 +310,10 @@ and print_List termList =
   match termList with
     [] ->
         () 
+
     | [term] ->
         print_term term 
+
     | term :: rest ->
         print_term term; 
         print_string ","; 
@@ -306,31 +337,35 @@ and print_ty = function
 
 and print_atomic_ty = function 
     TyBool -> 
-      open_box 1;
-      print_string "Bool";
-      close_box ();
+        open_box 1;
+        print_string "Bool";
+        close_box ();
+
     | TyNat -> 
-      open_box 1;
-      print_string "Nat";
-      close_box ();
+        open_box 1;
+        print_string "Nat";
+        close_box ();
+
     | TyString -> 
-      open_box 1;
-      print_string "String";
-      close_box ();
+        open_box 1;
+        print_string "String";
+        close_box ();
+
     | TyRecord tyRecordList -> 
         open_box 1;
         print_string "{";
         print_recordTyList tyRecordList;
         print_string "}";
         print_space ();
-        
         close_box ();
+
     | TyVariant tyRecordList -> 
         open_box 1;
         print_string "<";
         print_recordTyList tyRecordList;
         print_string ">";
         close_box ();
+
     | TyTuple tyList -> 
         open_box 1;
         print_string "{";
@@ -339,28 +374,28 @@ and print_atomic_ty = function
         close_box ();
 
     | TyList ty -> 
-      print_atomic_ty ty
+        print_atomic_ty ty
 
     | TyVar s -> 
-      open_box 1;
-      print_string s;
-      close_box ();
+        open_box 1;
+        print_string s;
+        close_box ();
     
     | ty -> 
-      open_box 1;
-      print_string "(";
-      print_ty ty;
-      print_string ")";
-      close_box(); 
+        open_box 1;
+        print_string "(";
+        print_ty ty;
+        print_string ")";
+        close_box(); 
 
       
 and print_tyList tyList =
   match tyList with
-    | [] ->
+    | [] ->  (*Empty list*)
         () 
-    | [ty] ->
+    | [ty] ->  (* Unique element *)
         print_ty ty 
-    | ty :: rest ->
+    | ty :: rest -> (* Various cases *)
         print_ty ty; 
         print_string ","; 
         print_space ();
@@ -368,23 +403,25 @@ and print_tyList tyList =
 
 and print_recordTyList tyRecordList =
   match tyRecordList with
-    | [] ->
-        () (* Lista vacia, no hay nada que imprimir *)
-    | [(label, ty)] ->
+    | [] -> (*Empty list*)
+        () 
+        
+    | [(label, ty)] -> (* Unique element *)
         print_string label;
         print_string ":";
         print_space ();
-        print_ty ty (* Un solo elemento, sin separadores *)
-    | (label, ty) :: rest ->
+        print_ty ty 
+
+    | (label, ty) :: rest -> (* Various cases *)
         print_string label;
         print_string ":";
         print_space ();
-        print_ty ty; (* Imprimir el par actual *)
-        print_string ", "; (* Separador entre pares *)
-        print_recordTyList rest (* Recursivamente imprimir el resto de la lista *)
+        print_ty ty; 
+        print_string ", "; 
+        print_recordTyList rest 
   
 
-
+(* Prints the type and term of an evaluated expression *)
 and print_eval tyTm tm' =
   open_box 1;
   print_string "-";
@@ -400,7 +437,7 @@ and print_eval tyTm tm' =
   close_box ();
   print_flush();
 
-  
+(* Prints a binding of a variable with its type and value *)
 and print_bind s tyTm tm' =  
   open_box 1;
   print_string s;
@@ -416,6 +453,7 @@ and print_bind s tyTm tm' =
   close_box ();
   print_flush();
 
+(* Prints a type binding, showing the variable's type *)
 and print_tbind s tyTm =  
   open_box 1;
   print_string "type";
